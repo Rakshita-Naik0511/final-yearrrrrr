@@ -23,11 +23,21 @@ const Setup = () => {
   const [experience, setExperience] = useState("");
   const [numQuestions, setNumQuestions] = useState("3");
 
+  const normalizeExperience = (value: string) => {
+    const v = (value || "").toLowerCase().trim();
+    if (["fresher", "junior", "mid", "senior"].includes(v)) return v;
+    if (v.includes("intern") || v.includes("student") || v.includes("entry") || v.includes("0") || v.includes("fresher")) return "fresher";
+    if (v.includes("1") || v.includes("2") || v.includes("junior")) return "junior";
+    if (v.includes("3") || v.includes("4") || v.includes("mid")) return "mid";
+    if (v.includes("5") || v.includes("6") || v.includes("7") || v.includes("senior") || v.includes("lead")) return "senior";
+    return "fresher";
+  };
+
   const handleResumeParsed = (data: ResumeData) => {
     setResumeData(data);
-    setName(data.name);
-    setRole(data.role);
-    setExperience(data.experience);
+    setName((data.name || "").trim());
+    setRole((data.role || "").trim());
+    setExperience(normalizeExperience(data.experience));
     setStep("configure");
   };
 
@@ -44,7 +54,7 @@ const Setup = () => {
     });
   };
 
-  const isValid = name && role && experience && resumeData;
+  const isValid = !!(name.trim() && role.trim() && experience && resumeData);
 
   return (
     <div className="min-h-screen bg-background">
