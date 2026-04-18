@@ -21,6 +21,7 @@ export interface ResumeData {
 const ResumeUpload = ({ onParsed }: ResumeUploadProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [parsedOk, setParsedOk] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const extractTextFromFile = async (file: File): Promise<string> => {
@@ -68,6 +69,7 @@ const ResumeUpload = ({ onParsed }: ResumeUploadProps) => {
     }
 
     setFile(selectedFile);
+    setParsedOk(false);
     setParsing(true);
 
     try {
@@ -78,10 +80,8 @@ const ResumeUpload = ({ onParsed }: ResumeUploadProps) => {
 
       // Extract text
       const rawText = await extractTextFromFile(selectedFile);
-      if (rawText.length < 50) {
-        toast({ title: "Could not extract text", description: "Please try a text-based PDF or a TXT file with your resume content.", variant: "destructive" });
-        setParsing(false);
-        return;
+      if (rawText.length < 20) {
+        throw new Error("Extracted text too short");
       }
 
       // Parse with AI
@@ -92,9 +92,11 @@ const ResumeUpload = ({ onParsed }: ResumeUploadProps) => {
       if (error) throw error;
 
       onParsed({ ...data, rawText: rawText.slice(0, 5000) });
+      setParsedOk(true);
       toast({ title: "Resume parsed!", description: `Welcome, ${data.name}!` });
     } catch (err) {
       console.error(err);
+      setParsedOk(false);
       toast({ title: "Parsing failed", description: "Could not parse resume. Please try again.", variant: "destructive" });
     } finally {
       setParsing(false);
@@ -130,7 +132,7 @@ const ResumeUpload = ({ onParsed }: ResumeUploadProps) => {
           <div className="flex-1 min-w-0">
             <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
             <p className="text-xs text-muted-foreground">
-              {parsing ? "Parsing with AI..." : "Parsed successfully"}
+              {parsing ? "Parsing with AI..." : parsedOk ? "Parsed successfully" : "Parsing incomplete"}
             </p>
           </div>
           {parsing ? (
