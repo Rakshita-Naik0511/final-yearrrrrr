@@ -40,6 +40,48 @@ interface RoundResult {
 
 const ROUNDS = ["resume", "aptitude", "hr"] as const;
 
+const getFallbackQuestions = (roundType: string, numQuestions: number, role: string): QuestionData[] => {
+  const n = Math.max(1, Math.min(10, Number(numQuestions) || 3));
+  const pool: QuestionData[] =
+    roundType === "aptitude"
+      ? [
+          {
+            question: "If 5 machines produce 500 units in 10 hours, how many units will 10 machines produce in 10 hours?",
+            category: "Numerical Ability",
+            options: ["500", "750", "1000", "1200"],
+            correctAnswer: "1000",
+            explanation: "Output is directly proportional to number of machines when time is constant.",
+          },
+          {
+            question: "Find the next number in the pattern: 3, 6, 11, 18, 27, ?",
+            category: "Logical Reasoning",
+            options: ["36", "38", "40", "42"],
+            correctAnswer: "38",
+            explanation: "Differences are +3, +5, +7, +9, so next is +11.",
+          },
+          {
+            question: "Choose the correct word: 'She has been working here ___ 2022.'",
+            category: "Verbal Reasoning",
+            options: ["since", "for", "from", "by"],
+            correctAnswer: "since",
+            explanation: "Use 'since' with a starting point in time.",
+          },
+        ]
+      : roundType === "hr"
+      ? [
+          { question: "Tell me about yourself and why you are interested in this role.", category: "HR" },
+          { question: "Describe a conflict you faced in a team and how you resolved it.", category: "Behavioral" },
+          { question: "Where do you see yourself in the next 3 years?", category: "Career Goals" },
+        ]
+      : [
+          { question: `Walk me through a project that best demonstrates your fit for a ${role} role.`, category: "Resume" },
+          { question: "Explain a difficult bug you fixed and your debugging process.", category: "Technical Experience" },
+          { question: "Describe a feature you built end-to-end and the trade-offs you made.", category: "System Thinking" },
+        ];
+
+  return Array.from({ length: n }, (_, i) => pool[i % pool.length]);
+};
+
 const Interview = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -80,15 +122,25 @@ const Interview = () => {
         },
       });
       if (error) throw error;
-      setQuestions(data.questions);
+      const apiQuestions = Array.isArray(data?.questions) ? data.questions : [];
+      if (apiQuestions.length === 0) {
+        throw new Error("No questions returned from API");
+      }
+      setQuestions(apiQuestions);
       setCurrentIndex(0);
       setAnswer("");
       setCurrentFeedback(null);
       setCurrentRoundResults([]);
     } catch (err) {
       console.error(err);
-      toast({ title: "Error", description: "Failed to generate questions.", variant: "destructive" });
-      navigate("/setup");
+      // Keep the interview moving even if backend AI is unavailable.
+      const fallback = getFallbackQuestions(roundType, config!.numQuestions, config!.role);
+      setQuestions(fallback);
+      setCurrentIndex(0);
+      setAnswer("");
+      setCurrentFeedback(null);
+      setCurrentRoundResults([]);
+      toast({ title: "Using backup questions", description: "AI service is unavailable right now.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -137,7 +189,17 @@ const Interview = () => {
       ]);
     } catch (err) {
       console.error(err);
-      toast({ title: "Error", description: "Failed to evaluate answer.", variant: "destructive" });
+      const fallbackFeedback: AnswerFeedback = {
+        score: Math.max(4, Math.min(9, Math.round((answer.trim().length / 40) * 2 + 4))),
+        feedback: "Your answer is recorded. Be more specific, use structured points, and include one concrete example for stronger impact.",
+        improvedAnswer: `${answer.trim()}\n\n(Improved) I addressed the problem with a clear approach, collaborated with my team, and achieved measurable results.`,
+      };
+      setCurrentFeedback(fallbackFeedback);
+      setCurrentRoundResults((prev) => [
+        ...prev,
+        { ...fallbackFeedback, question: q.question, userAnswer: answer, videoAnalysis: currentRound === "hr" ? videoAnalysis ?? undefined : undefined },
+      ]);
+      toast({ title: "Using backup evaluation", description: "AI evaluator is unavailable right now.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
