@@ -55,6 +55,34 @@ const ResumeUpload = ({ onParsed }: ResumeUploadProps) => {
     return text.replace(/\s+/g, " ").trim();
   };
 
+  const buildLocalResumeData = (selectedFile: File, rawText: string): ResumeData => {
+    const baseName = selectedFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, " ").trim();
+    const guessedName = baseName || "Candidate";
+    const text = (rawText || "").trim();
+    const normalized = text.toLowerCase();
+    const guessedRole =
+      normalized.includes("data") ? "Data Analyst" :
+      normalized.includes("frontend") ? "Frontend Developer" :
+      normalized.includes("backend") ? "Backend Developer" :
+      normalized.includes("full stack") ? "Full Stack Developer" :
+      "Software Engineer";
+    const experience =
+      /(\b5\+?\s*(years|yrs)\b|\bsenior\b)/i.test(text) ? "senior" :
+      /(\b3|4\s*(years|yrs)\b|\bmid\b)/i.test(text) ? "mid" :
+      /(\b1|2\s*(years|yrs)\b|\bjunior\b)/i.test(text) ? "junior" :
+      "fresher";
+
+    return {
+      name: guessedName,
+      role: guessedRole,
+      experience,
+      skills: ["Communication", "Problem Solving"],
+      education: "Not specified",
+      summary: "Basic profile created from uploaded resume. You can edit details in the next step.",
+      rawText: text || `Resume uploaded: ${selectedFile.name}`,
+    };
+  };
+
   const handleUpload = async (selectedFile: File) => {
     if (!selectedFile) return;
 
@@ -80,24 +108,46 @@ const ResumeUpload = ({ onParsed }: ResumeUploadProps) => {
 
       // Extract text
       const rawText = await extractTextFromFile(selectedFile);
-      if (rawText.length < 20) {
-        throw new Error("Extracted text too short");
+      const trimmedRawText = rawText.trim();
+      if (trimmedRawText.length < 20) {
+        const localData = buildLocalResumeData(selectedFile, trimmedRawText);
+        onParsed(localData);
+        setParsedOk(true);
+        toast({
+          title: "Resume loaded",
+          description: "Could not read full text, but you can continue and edit details in Configure step.",
+        });
+        return;
       }
 
       // Parse with AI
       const { data, error } = await supabase.functions.invoke("mock-interview", {
-        body: { action: "parse_resume", resumeText: rawText.slice(0, 5000) },
+        body: { action: "parse_resume", resumeText: trimmedRawText.slice(0, 5000) },
       });
 
-      if (error) throw error;
+      if (error) {
+        const localData = buildLocalResumeData(selectedFile, trimmedRawText);
+        onParsed(localData);
+        setParsedOk(true);
+        toast({
+          title: "Resume loaded",
+          description: "AI parsing is unavailable right now. You can continue with editable details.",
+        });
+        return;
+      }
 
-      onParsed({ ...data, rawText: rawText.slice(0, 5000) });
+      onParsed({ ...data, rawText: trimmedRawText.slice(0, 5000) });
       setParsedOk(true);
       toast({ title: "Resume parsed!", description: `Welcome, ${data.name}!` });
     } catch (err) {
       console.error(err);
-      setParsedOk(false);
-      toast({ title: "Parsing failed", description: "Could not parse resume. Please try again.", variant: "destructive" });
+      const localData = buildLocalResumeData(selectedFile, "");
+      onParsed(localData);
+      setParsedOk(true);
+      toast({
+        title: "Resume loaded",
+        description: "Parsing had issues, but you can continue and edit details manually.",
+      });
     } finally {
       setParsing(false);
     }
