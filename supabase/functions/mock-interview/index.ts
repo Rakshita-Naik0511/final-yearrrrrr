@@ -14,11 +14,18 @@ function jsonResponse(data: unknown, status = 200) {
 
 async function callAI(systemPrompt: string, userPrompt: string, tools?: any[], toolChoice?: any) {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  // If no AI key is configured, callers should use a deterministic fallback.
-  if (!LOVABLE_API_KEY) throw new Error("AI_KEY_NOT_CONFIGURED");
+  const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+
+  // Provider 1: Lovable (existing)
+  // Provider 2: OpenRouter free model (new)
+  if (!LOVABLE_API_KEY && !OPENROUTER_API_KEY) {
+    throw new Error("AI_KEY_NOT_CONFIGURED");
+  }
 
   const body: any = {
-    model: "gpt-4o-mini",
+    model: LOVABLE_API_KEY
+      ? "gpt-4o-mini"
+      : (Deno.env.get("OPENROUTER_MODEL") || "meta-llama/llama-3.1-8b-instruct:free"),
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -27,12 +34,22 @@ async function callAI(systemPrompt: string, userPrompt: string, tools?: any[], t
   if (tools) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const endpoint = LOVABLE_API_KEY
+    ? "https://ai.gateway.lovable.dev/v1/chat/completions"
+    : "https://openrouter.ai/api/v1/chat/completions";
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${LOVABLE_API_KEY || OPENROUTER_API_KEY}`,
+  };
+  if (!LOVABLE_API_KEY) {
+    headers["HTTP-Referer"] = "https://zqjgchqcpykufcpbheqc.supabase.co";
+    headers["X-Title"] = "Interview Genius";
+  }
+
+  const response = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
